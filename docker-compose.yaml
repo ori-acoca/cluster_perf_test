@@ -79,7 +79,7 @@ services:
       custom_network:
         ipv4_address: 100.0.0.10
     volumes:
-      - /Users/ori.acoca/vsc_projects/network_stress_test:/workspace
+      - ./:/workspace
     ports:
       - "10100:22"
 
