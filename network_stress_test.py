@@ -4,7 +4,7 @@ import inquirer
 import paramiko
 import time
 
-
+# test
 # Function to execute commands on remote server
 def execute_on_remote_nodes(host, username, password, command, supress_output=True):
     client = paramiko.client.SSHClient()
