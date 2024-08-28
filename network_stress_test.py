@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import sys
 
 import inquirer
 import paramiko
@@ -29,10 +30,21 @@ def cleanup_leftovers(username: str, password: str, nodes: list):
 
 
 # Function to read node list from a file
-def read_node_list():
-    with open('ethernet_ips.txt', 'r') as f:
-        nodes = [node.strip() for node in f.readlines()]
-    return nodes
+def read_node_list(link_layer):
+
+    file_mapping = {
+        "Ethernet": "ethernet_ips.txt",
+        "InfiniBand": "infiniband_ips.txt"
+    }
+    if link_layer not in file_mapping:
+        raise Exception("Unsupported link layer")
+    try:
+        with open(file_mapping[link_layer], 'r') as f:
+            nodes = [node.strip() for node in f.readlines()]
+            return nodes
+    except FileNotFoundError:
+        print(f"{file_mapping[link_layer]} wasn't found, please check")
+        sys.exit()
 
 
 # Function to set up the server for testing
@@ -148,8 +160,8 @@ def get_link_layer():
 
 
 def main():
-    username, password = get_creds()
     link_layer = get_link_layer()
+    username, password = get_creds()
     nodes = read_node_list()
     cleanup_leftovers(username=username, password=password, nodes=nodes)
     results = all_to_all(link_layer=link_layer, node_list=nodes, username=username, password=password)
