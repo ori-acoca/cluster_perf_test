@@ -56,7 +56,7 @@ def setup_server(link_layer, server, username, password):
     else:
         raise Exception('Unsupported link layer')
 
-    print("###### " + server + " ######")
+    print('\n' + "###### " + server + " ######")
     execute_on_remote_nodes(server, username, password, open_server, suppress_output=True)
 
 
@@ -162,7 +162,7 @@ def get_link_layer():
 def main():
     link_layer = get_link_layer()
     username, password = get_creds()
-    nodes = read_node_list()
+    nodes = read_node_list(link_layer)
     cleanup_leftovers(username=username, password=password, nodes=nodes)
     results = all_to_all(link_layer=link_layer, node_list=nodes, username=username, password=password)
     overall_avg_per_server = calc_avg(results)
