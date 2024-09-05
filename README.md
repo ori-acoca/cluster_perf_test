@@ -9,3 +9,8 @@ The files should be:
     - infiniband_ips.txt
 Each line in the file should be an IP address of a node's interface.
 
+
+Requirements:
+- Passwordless SSH from the headnode to all cluster nodes
+- iperf version 2.1.6 installed on all nodes
+- perftest version<X> install on all nodes

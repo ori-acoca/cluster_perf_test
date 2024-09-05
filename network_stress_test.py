@@ -1,37 +1,61 @@
 #!/usr/bin/python3
+import os
 import sys
-
 import inquirer
 import paramiko
 import time
 
 
-# Function to execute commands on remote server
-def execute_on_remote_nodes(host, username, password, command, suppress_output=True):
-    client = paramiko.client.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(host, username=username, password=password)
-    _stdin, _stdout, _stderr = client.exec_command(command)
+class Credentials:
+    def __init__(self):
+        # Initialize the object with user input for two values
+        self._username = input("Enter the username you are SSH with: \n")
+        self._key_name = input("\nEnter your SSH key name: \n")
 
-    if not suppress_output:
-        output = _stdout.read().decode()
-        client.close()
-        return output
+    @property
+    def username(self):
+        # Getter method for retrieving the username
+        return self._username
 
-    client.close()
+    @property
+    def key_name(self):
+        # Getter method for retrieving the SSH key name
+        return self._key_name
 
 
-# Function to clean-up tests leftovers form nodes
-def cleanup_leftovers(username: str, password: str, nodes: list):
-    cleanup_command = "pkill -f 'iperf'; pkill -f 'ib_write_bw', pkill -f 'ib_write_lat'"
-    print("Cleaning leftovers from previous tests")
+def execute_on_remote_nodes(host, command, creds, suppress_output=True):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        ssh.connect(
+            hostname=host,
+            username=creds.username,
+            key_filename=os.path.join(os.path.expanduser('~'), ".ssh", creds.key_name)
+        )
+        _stdin, _stdout, _stderr = ssh.exec_command(command)
+
+        if not suppress_output:
+            output = _stdout.read().decode()
+            ssh.close()
+            return output
+    except paramiko.SSHException as e:
+        print(f"SSH error: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        ssh.close()
+
+
+# Function to clean up test leftovers from nodes
+def cleanup_leftovers(nodes: list, creds):
+    cleanup_command = "pkill -f 'iperf'; pkill -f 'ib_write_bw'; pkill -f 'ib_write_lat'"
+    print("\nCleaning leftovers from previous tests")
     for node in nodes:
-        execute_on_remote_nodes(node, username, password, cleanup_command, suppress_output=True)
+        execute_on_remote_nodes(node, cleanup_command, creds, suppress_output=True)
 
 
 # Function to read node list from a file
 def read_node_list(link_layer):
-
     file_mapping = {
         "Ethernet": "ethernet_ips.txt",
         "InfiniBand": "infiniband_ips.txt"
@@ -48,27 +72,22 @@ def read_node_list(link_layer):
 
 
 # Function to set up the server for testing
-def setup_server(link_layer, server, username, password):
+def setup_server(link_layer, server, creds):
     if link_layer == "Ethernet":
-        open_server = f"iperf3 -s '{server}' --format G"
+        open_server = f"iperf -s '{server}'"
     elif link_layer == "InfiniBand":
         open_server = f"ib_write_bw -s '{server}' --report_gbits"
     else:
         raise Exception('Unsupported link layer')
 
     print('\n' + "###### " + server + " ######")
-    execute_on_remote_nodes(server, username, password, open_server, suppress_output=True)
+    execute_on_remote_nodes(server, open_server, creds, suppress_output=True)
 
 
-# Function to run performance test from client to server
-def run_client_test(link_layer, client, server, username, password):
+def run_client_test(link_layer, client, server, creds):
     if link_layer == "Ethernet":
         open_client = (
-            f"iperf3 -c {server} -P 8 -t 1 | "
-            f"grep SUM | "
-            f"egrep 'sender|receiver' | "
-            f"awk '{{for(i=1;i<=NF;i++) if ($i ~ /bits\\/sec$/) print $(i-1) \" \" $i}}' | "
-            f"awk '{{print $1}}'"
+            f"iperf -c {server} -P 32 -f g | grep SUM | awk '{{print $6}}'"
         )
     elif link_layer == "InfiniBand":
         open_client = f"ib_write_bw '{server}' --report_gbits"
@@ -76,37 +95,24 @@ def run_client_test(link_layer, client, server, username, password):
         raise Exception('Unsupported link layer')
 
     print(server + " <===> " + client)
-    measured_perf = execute_on_remote_nodes(client, username, password, open_client, suppress_output=False)
-    return parse_performance_output(link_layer, measured_perf)
-
-
-# Function to parse performance output
-def parse_performance_output(link_layer, measured_perf):
-    lines = measured_perf.splitlines()
-    result = {}
-
-    if link_layer == "Ethernet":
-        if len(lines) >= 2:
-            result['tx'] = float(lines[0])
-            result['rx'] = float(lines[1])
-            result['avg'] = (result['tx'] + result['rx']) / 2
-
-    return result
+    measured_perf = execute_on_remote_nodes(client, open_client, creds, suppress_output=False)
+    # Remove any trailing whitespace or newline characters from the output
+    measured_perf = measured_perf.strip()
+    return measured_perf
 
 
 # Function to perform all-to-all performance tests
-def all_to_all(link_layer, node_list: list, username: str, password: str):
+def all_to_all(link_layer, node_list: list, creds):
     results = {}
 
     for server in node_list:
-        setup_server(link_layer, server, username, password)
+        setup_server(link_layer, server, creds)
         results[server] = {}
 
         for client in node_list:
             if client != server:
-                result = run_client_test(link_layer, client, server, username, password)
+                result = run_client_test(link_layer, client, server, creds)
                 results[server][client] = result
-
                 time.sleep(0.1)
     return results
 
@@ -120,10 +126,11 @@ def calc_avg(results):
         client_count = 0
 
         for client in results[server]:
-            avg_sum += results[server][client]['avg']
+            # Convert the string result to float and strip any extra whitespace or newline characters
+            avg_sum += float(results[server][client].strip())
             client_count += 1
 
-        overall_avg_per_server[server] = avg_sum / client_count
+        overall_avg_per_server[server] = avg_sum / client_count if client_count > 0 else 0.0
 
     return overall_avg_per_server
 
@@ -136,13 +143,6 @@ def sort_results(overall_avg_per_server):
     print("\nOverall Average per Server (Sorted):")
     for server, avg in sorted_avg_per_server.items():
         print(f"{server}:  {avg:.2f} Gbits/sec")
-
-
-def get_creds():
-    username = input("Please type the username for the cluster nodes \n")
-    password = input("Please type the password for the cluster nodes \n")
-
-    return username, password
 
 
 def get_link_layer():
@@ -161,13 +161,13 @@ def get_link_layer():
 
 def main():
     link_layer = get_link_layer()
-    username, password = get_creds()
+    creds = Credentials()
     nodes = read_node_list(link_layer)
-    cleanup_leftovers(username=username, password=password, nodes=nodes)
-    results = all_to_all(link_layer=link_layer, node_list=nodes, username=username, password=password)
+    cleanup_leftovers(nodes=nodes, creds=creds)
+    results = all_to_all(link_layer=link_layer, node_list=nodes, creds=creds)
     overall_avg_per_server = calc_avg(results)
     sort_results(overall_avg_per_server)
-
+    cleanup_leftovers(nodes=nodes, creds=creds)
 
 if __name__ == '__main__':
     main()
