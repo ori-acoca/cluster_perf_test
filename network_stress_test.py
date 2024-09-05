@@ -50,7 +50,7 @@ def banner_results():
 class Credentials:
     def __init__(self):
         # Initialize the object with user input for two values
-        self._username = input("Enter the username you are SSH with: \n")
+        self._username = input("Enter the username you SSH with: \n")
         print()
         self._key_name = input("Enter your SSH key name: \n")
         print()
