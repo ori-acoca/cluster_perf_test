@@ -3,7 +3,6 @@
 import os
 import sys
 
-
 from tabulate import tabulate
 import paramiko
 import time
@@ -11,7 +10,6 @@ from colorama import Fore, Style
 import logging
 import argparse
 
-from datetime import datetime
 
 logging.basicConfig(
     level=logging.WARNING,  # log level
@@ -24,7 +22,7 @@ def banner(banner_name):
     """
     Function to print banners
 
-    :param banner_name
+    :param banner_name: name of the banner to print
     """
     banner_map = {
         "welcome": "Network Stress Test",
@@ -110,9 +108,8 @@ def write_to_file(data_to_write: list, file_name: str):
     :param file_name: name of the file to write to
     """
 
-
     try:
-       with open(fr'./{file_name}', 'w') as f:
+        with open(fr'./{file_name}', 'w') as f:
             f.write('\n'.join(data_to_write))
     except Exception as e:
         logger.error(f"Error: can't write log to file {file_name} - {e}")
