@@ -14,3 +14,4 @@ Requirements:
 - Passwordless SSH from the headnode to all cluster nodes
 - iperf version 2.1.6 installed on all nodes
 - perftest version<X> install on all nodes
+- Disable firewall.  For Rockey - "systemctl stop firewalld; systemctl disable firewalld; setenforce 0"
